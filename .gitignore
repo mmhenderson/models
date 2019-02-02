@@ -89,4 +89,13 @@ ENV/
 .ropeproject
 
 # PyCharm
-.idea/
+.idea
+
+# Images don't get synced
+.png
+
+# tfrecord files
+*.tfrecord*
+*.ckpt*
+
+/
