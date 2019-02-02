@@ -89,13 +89,9 @@ ENV/
 .ropeproject
 
 # PyCharm
-.idea
+.idea/
 
-# Images don't get synced
-.png
+# For mac
+.DS_Store
 
-# tfrecord files
-*.tfrecord*
-*.ckpt*
-
-/
+samples/outreach/blogs/segmentation_blogpost/carvana-image-masking-challenge/

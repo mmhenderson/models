@@ -116,7 +116,7 @@ class InceptionTest(tf.test.TestCase):
         if endpoint != 'PreAuxLogits':
           self.assertTrue(out_tensor.op.name.startswith(
               'InceptionResnetV2/' + endpoint))
-        self.assertItemsEqual(endpoints[:index+1], end_points)
+        self.assertItemsEqual(endpoints[:index+1], end_points.keys())
 
   def testBuildAndCheckAllEndPointsUptoPreAuxLogits(self):
     batch_size = 5
@@ -227,8 +227,8 @@ class InceptionTest(tf.test.TestCase):
                            [batch_size, 3, 3, 1536])
 
   def testGlobalPool(self):
-    batch_size = 2
-    height, width = 400, 600
+    batch_size = 1
+    height, width = 330, 400
     num_classes = 1000
     with self.test_session():
       inputs = tf.random_uniform((batch_size, height, width, 3))
@@ -238,11 +238,11 @@ class InceptionTest(tf.test.TestCase):
                            [batch_size, num_classes])
       pre_pool = end_points['Conv2d_7b_1x1']
       self.assertListEqual(pre_pool.get_shape().as_list(),
-                           [batch_size, 11, 17, 1536])
+                           [batch_size, 8, 11, 1536])
 
   def testGlobalPoolUnknownImageShape(self):
-    batch_size = 2
-    height, width = 400, 600
+    batch_size = 1
+    height, width = 330, 400
     num_classes = 1000
     with self.test_session() as sess:
       inputs = tf.placeholder(tf.float32, (batch_size, None, None, 3))
@@ -257,7 +257,7 @@ class InceptionTest(tf.test.TestCase):
       logits_out, pre_pool_out = sess.run([logits, pre_pool],
                                           {inputs: images.eval()})
       self.assertTupleEqual(logits_out.shape, (batch_size, num_classes))
-      self.assertTupleEqual(pre_pool_out.shape, (batch_size, 11, 17, 1536))
+      self.assertTupleEqual(pre_pool_out.shape, (batch_size, 8, 11, 1536))
 
   def testUnknownBatchSize(self):
     batch_size = 1
@@ -305,6 +305,29 @@ class InceptionTest(tf.test.TestCase):
       sess.run(tf.global_variables_initializer())
       output = sess.run(predictions)
       self.assertEquals(output.shape, (eval_batch_size,))
+
+  def testNoBatchNormScaleByDefault(self):
+    height, width = 299, 299
+    num_classes = 1000
+    inputs = tf.placeholder(tf.float32, (1, height, width, 3))
+    with tf.contrib.slim.arg_scope(inception.inception_resnet_v2_arg_scope()):
+      inception.inception_resnet_v2(inputs, num_classes, is_training=False)
+
+    self.assertEqual(tf.global_variables('.*/BatchNorm/gamma:0$'), [])
+
+  def testBatchNormScale(self):
+    height, width = 299, 299
+    num_classes = 1000
+    inputs = tf.placeholder(tf.float32, (1, height, width, 3))
+    with tf.contrib.slim.arg_scope(
+        inception.inception_resnet_v2_arg_scope(batch_norm_scale=True)):
+      inception.inception_resnet_v2(inputs, num_classes, is_training=False)
+
+    gamma_names = set(
+        v.op.name for v in tf.global_variables('.*/BatchNorm/gamma:0$'))
+    self.assertGreater(len(gamma_names), 0)
+    for v in tf.global_variables('.*/BatchNorm/moving_mean:0$'):
+      self.assertIn(v.op.name[:-len('moving_mean')] + 'gamma', gamma_names)
 
 
 if __name__ == '__main__':
