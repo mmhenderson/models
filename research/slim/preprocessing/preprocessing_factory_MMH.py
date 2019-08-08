@@ -25,6 +25,7 @@ from preprocessing import inception_preprocessing
 from preprocessing import lenet_preprocessing
 from preprocessing import vgg_preprocessing
 from preprocessing import inception_preprocessing_NOFLIP
+from preprocessing import vgg_preprocessing_NOFLIP
 
 slim = tf.contrib.slim
 
@@ -76,7 +77,11 @@ def get_preprocessing(name, is_training=False, flipLR=True):
     raise ValueError('Preprocessing name [%s] was not recognized' % name)
 
   if flipLR==False:
-     preprocessing_fn_map[name] = inception_preprocessing_NOFLIP
+     currname = str(preprocessing_fn_map[name])
+     if currname.find('inception'):
+         preprocessing_fn_map[name] = inception_preprocessing_NOFLIP
+     else:
+         preprocessing_fn_map[name] = vgg_preprocessing_NOFLIP
 
   def preprocessing_fn(image, output_height, output_width, **kwargs):      
     return preprocessing_fn_map[name].preprocess_image(

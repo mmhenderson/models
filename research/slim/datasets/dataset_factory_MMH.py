@@ -24,6 +24,8 @@ from datasets import imagenet
 from datasets import mnist
 from datasets import oriTrn1
 from datasets import oriTst1
+from datasets import oriTrn2
+from datasets import oriTst2
 
 datasets_map = {
     'cifar10': cifar10,
@@ -31,7 +33,9 @@ datasets_map = {
     'imagenet': imagenet,
     'mnist': mnist,
     'oriTrn1': oriTrn1,
-    'oriTst1': oriTst1
+    'oriTst1': oriTst1,
+    'oriTrn2': oriTrn2,
+    'oriTst2': oriTst2
 }
 
 

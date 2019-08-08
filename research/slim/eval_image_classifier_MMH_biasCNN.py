@@ -218,7 +218,9 @@ def main(_):
         keylist= list(end_pts.keys())
      
         for kk in range(np.size(keylist)):
-            fn2save = FLAGS.eval_dir + '/' + batch_name + '_' + keylist[kk] + '.npy'
+            keystr = keylist[kk]
+            keystr = keystr.replace('/','_') 
+            fn2save = FLAGS.eval_dir + '/' + batch_name + '_' + keystr + '.npy'
             np.save(fn2save, end_pts[keylist[kk]])
             
         logits = out['logits']
