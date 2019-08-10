@@ -26,6 +26,8 @@ from datasets import oriTrn1
 from datasets import oriTst1
 from datasets import oriTrn2
 from datasets import oriTst2
+from datasets import oriTrn2a
+from datasets import oriTst2a
 
 datasets_map = {
     'cifar10': cifar10,
@@ -35,7 +37,9 @@ datasets_map = {
     'oriTrn1': oriTrn1,
     'oriTst1': oriTst1,
     'oriTrn2': oriTrn2,
-    'oriTst2': oriTst2
+    'oriTst2': oriTst2,
+    'oriTrn2a': oriTrn2a,
+    'oriTst2a': oriTst2a
 }
 
 
