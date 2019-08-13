@@ -24,7 +24,7 @@ from __future__ import print_function
 import math
 import tensorflow as tf
 
-from datasets import dataset_factory_MMH
+from datasets import datasets_MMH_biasCNN
 from nets import nets_factory
 from preprocessing import preprocessing_factory_MMH
 #import os
@@ -111,7 +111,7 @@ def main(_):
         ######################
         # Select the dataset #
         ######################
-        dataset = dataset_factory_MMH.get_dataset(
+        dataset = datasets_MMH_biasCNN.get_dataset(
             FLAGS.dataset_name, batch_name, FLAGS.dataset_dir)
     
         ####################

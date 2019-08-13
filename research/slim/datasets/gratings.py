@@ -12,9 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Provides data for the novel object dataset.
-
-This dataset used for training only!! no noise.
+"""Provides datasets with grating images, at various orientations.
 
 """
 
@@ -29,19 +27,15 @@ from datasets import dataset_utils
 
 slim = tf.contrib.slim
 
-_FILE_PATTERN = 'oriTrn2_%s_*.tfrecord'
-
-SPLITS_TO_SIZES = {'train': 1944, 'validation': 216}
-
 _NUM_CLASSES = 180
 
 _ITEMS_TO_DESCRIPTIONS = {
-    'image': 'A color image of varying size.',
+    'image': 'A grayscale image of a grating.',
     'label': 'A single integer between 0 and 180. Describes the rotation of grating relative to vertical.'
 }
 
 
-def get_split(split_name, dataset_dir, file_pattern=None, reader=None):
+def get_split(split_name, dataset_dir, dataset_str, reader=None):
   """Gets a dataset tuple with instructions for reading flowers.
 
   Args:
@@ -58,12 +52,22 @@ def get_split(split_name, dataset_dir, file_pattern=None, reader=None):
   Raises:
     ValueError: if `split_name` is not a valid train/validation split.
   """
-  if split_name not in SPLITS_TO_SIZES:
-    raise ValueError('split name %s was not recognized.' % split_name)
-
-  if not file_pattern:
-    file_pattern = _FILE_PATTERN
+ 
+  
+  file_pattern = dataset_str + '_%s_*.tfrecord'
   file_pattern = os.path.join(dataset_dir, file_pattern % split_name)
+
+  if 'oriTrn1' in dataset_str:
+      SPLITS_TO_SIZES = {'train': 2592, 'validation': 288}
+  elif 'Trn' in dataset_str:
+      SPLITS_TO_SIZES = {'train': 1944, 'validation': 216}
+  elif 'Tst' in dataset_str:
+      SPLITS_TO_SIZES = {}
+      for bb in range(96):
+          SPLITS_TO_SIZES['batch' + str(bb)] = 90
+ 
+  if split_name not in SPLITS_TO_SIZES:
+      raise ValueError('split name %s was not recognized.' % split_name)
 
   # Allowing None in the signature so that dataset_factory can use the default.
   if reader is None:

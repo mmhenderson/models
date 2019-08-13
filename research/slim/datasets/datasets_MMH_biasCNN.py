@@ -18,42 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from datasets import cifar10
-from datasets import flowers
-from datasets import imagenet
-from datasets import mnist
-from datasets import oriTrn1
-from datasets import oriTst1
-from datasets import oriTrn2
-from datasets import oriTst2
-from datasets import oriTrn2a
-from datasets import oriTst2a
-from datasets import oriTst3
-from datasets import oriTrn3
-from datasets import oriTst4
-from datasets import oriTrn4
-from datasets import oriTst5
-from datasets import oriTrn5
-
-datasets_map = {
-    'cifar10': cifar10,
-    'flowers': flowers,
-    'imagenet': imagenet,
-    'mnist': mnist,
-    'oriTrn1': oriTrn1,
-    'oriTst1': oriTst1,
-    'oriTrn2': oriTrn2,
-    'oriTst2': oriTst2,
-    'oriTrn2a': oriTrn2a,
-    'oriTst2a': oriTst2a,
-    'oriTrn3': oriTrn3,
-    'oriTst3': oriTst3,
-    'oriTrn4': oriTrn4,
-    'oriTst4': oriTst4,
-    'oriTrn5': oriTrn5,
-    'oriTst5': oriTst5
-}
-
+from datasets import gratings
 
 def get_dataset(name, split_name, dataset_dir, file_pattern=None, reader=None):
   """Given a dataset name and a split_name returns a Dataset.
@@ -72,10 +37,10 @@ def get_dataset(name, split_name, dataset_dir, file_pattern=None, reader=None):
   Raises:
     ValueError: If the dataset `name` is unknown.
   """
-  if name not in datasets_map:
+  if 'ori' not in name:
     raise ValueError('Name of dataset unknown %s' % name)
-  return datasets_map[name].get_split(
+  return gratings.get_split(
       split_name,
       dataset_dir,
-      file_pattern,
+      name,      
       reader)
