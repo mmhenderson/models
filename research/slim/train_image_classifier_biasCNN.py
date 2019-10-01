@@ -20,14 +20,26 @@ from __future__ import print_function
 
 import tensorflow as tf
 
-from datasets import datasets_MMH_biasCNN
+from datasets import dataset_biasCNN
 from deployment import model_deploy
 from nets import nets_factory
-from preprocessing import preprocessing_factory_MMH
+from preprocessing import preprocessing_biasCNN
 
 slim = tf.contrib.slim
 
-#%% set up the flags 
+####################################################
+# Extra flags added for biasCNN training experiment
+####################################################
+
+tf.app.flags.DEFINE_boolean(
+    'flipLR', False, 'Boolean for whether to apply random left-right flips during preprocessing (applies to training only).')
+
+tf.app.flags.DEFINE_boolean(
+    'random_scale', False, 'Boolean for whether to randomly scale images before cropping during preprocessing (applies to training only).')
+
+##########################
+# Basic/path information
+##########################
 
 tf.app.flags.DEFINE_string(
     'master', '', 'The address of the TensorFlow master to use.')
@@ -37,7 +49,10 @@ tf.app.flags.DEFINE_string(
     'Directory where checkpoints and event logs are written to.')
 
 tf.app.flags.DEFINE_integer('num_clones', 1,
-                            'Number of model clones to deploy.')
+                            'Number of model clones to deploy. Note For '
+                            'historical reasons loss from all clones averaged '
+                            'out and learning rate decay happen per clone '
+                            'epochs')
 
 tf.app.flags.DEFINE_boolean('clone_on_cpu', False,
                             'Use CPUs to deploy clones.')
@@ -78,9 +93,6 @@ tf.app.flags.DEFINE_integer(
 
 tf.app.flags.DEFINE_float(
     'weight_decay', 0.00004, 'The weight decay on the model weights.')
-#tf.app.flags.DEFINE_float(
-#    'weight_decay', 0.0008, 'The weight decay on the model weights.')
-
 
 tf.app.flags.DEFINE_string(
     'optimizer', 'rmsprop',
@@ -126,6 +138,11 @@ tf.app.flags.DEFINE_float('rmsprop_momentum', 0.9, 'Momentum.')
 
 tf.app.flags.DEFINE_float('rmsprop_decay', 0.9, 'Decay term for RMSProp.')
 
+tf.app.flags.DEFINE_integer(
+    'quantize_delay', -1,
+    'Number of steps to start quantized training. Set to -1 would disable '
+    'quantized training.')
+
 #######################
 # Learning Rate Flags #
 #######################
@@ -150,7 +167,10 @@ tf.app.flags.DEFINE_float(
 
 tf.app.flags.DEFINE_float(
     'num_epochs_per_decay', 2.0,
-    'Number of epochs after which learning rate decays.')
+    'Number of epochs after which learning rate decays. Note: this flag counts '
+    'epochs per clone but aggregates per sync replicas. So 1.0 means that '
+    'each clone will go over full epoch individually, but replicas will go '
+    'once across all replicas.')
 
 tf.app.flags.DEFINE_bool(
     'sync_replicas', False,
@@ -197,7 +217,7 @@ tf.app.flags.DEFINE_integer(
 tf.app.flags.DEFINE_integer(
     'train_image_size', None, 'Train image size')
 
-tf.app.flags.DEFINE_integer('max_number_of_steps', 1000,
+tf.app.flags.DEFINE_integer('max_number_of_steps', 400000,
                             'The maximum number of training steps.')
 
 #####################
@@ -238,6 +258,9 @@ def _configure_learning_rate(num_samples_per_epoch, global_step):
   Raises:
     ValueError: if
   """
+  # Note: when num_clones is > 1, this will actually have each clone to go
+  # over each epoch FLAGS.num_epochs_per_decay times. This is different
+  # behavior from sync replicas and is expected to produce different results.
   decay_steps = int(num_samples_per_epoch / FLAGS.batch_size *
                     FLAGS.num_epochs_per_decay)
   if FLAGS.sync_replicas:
@@ -407,7 +430,7 @@ def main(_):
     ######################
     # Select the dataset #
     ######################
-    dataset = datasets_MMH_biasCNN.get_dataset(
+    dataset = dataset_biasCNN.get_dataset(
         FLAGS.dataset_name, FLAGS.dataset_split_name, FLAGS.dataset_dir)
 
     ######################
@@ -423,9 +446,9 @@ def main(_):
     # Select the preprocessing function #
     #####################################
     preprocessing_name = FLAGS.preprocessing_name or FLAGS.model_name
-    image_preprocessing_fn = preprocessing_factory_MMH.get_preprocessing(
+    image_preprocessing_fn = preprocessing_biasCNN.get_preprocessing(
         preprocessing_name,
-        is_training=True, flipLR = False)
+        is_training=True, flipLR = FLAGS.flipLR, random_scale = FLAGS.random_scale)
 
     ##############################################################
     # Create a dataset provider that loads data from the dataset #
@@ -508,6 +531,10 @@ def main(_):
     else:
       moving_average_variables, variable_averages = None, None
 
+    if FLAGS.quantize_delay >= 0:
+      tf.contrib.quantize.create_training_graph(
+          quant_delay=FLAGS.quantize_delay)
+      
     #########################################
     # Configure the optimization procedure. #
     #########################################
@@ -556,7 +583,6 @@ def main(_):
 
     # Merge all summaries together.
     summary_op = tf.summary.merge(list(summaries), name='summary_op')
-
 
     ###########################
     # Kicks off the training. #

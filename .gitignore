@@ -1,3 +1,12 @@
+/research/slim/datasets/ILSVRC2012/
+*.tar
+*.jpeg
+*.png
+*.JPEG
+*.JPG
+*.jpg
+*.PNG
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

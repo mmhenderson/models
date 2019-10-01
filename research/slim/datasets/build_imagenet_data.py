@@ -172,6 +172,8 @@ def _float_feature(value):
 
 def _bytes_feature(value):
   """Wrapper for inserting bytes features into Example proto."""
+  if type(value)==str:
+      value = str.encode(value)
   return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
 
@@ -314,7 +316,8 @@ def _process_image(filename, coder):
     width: integer, image width in pixels.
   """
   # Read the image file.
-  image_data = tf.gfile.FastGFile(filename, 'r').read()
+#  print(filename)
+  image_data = tf.gfile.FastGFile(filename, 'rb').read()
 
   # Clean the dirty data.
   if _is_png(filename):
@@ -509,7 +512,7 @@ def _find_image_files(data_dir, labels_file):
 
   # Construct the list of JPEG files and labels.
   for synset in challenge_synsets:
-    jpeg_file_path = '%s/%s/*.JPEG' % (data_dir, synset)
+    jpeg_file_path = '%s/%s/*.jpeg' % (data_dir, synset)
     matching_files = tf.gfile.Glob(jpeg_file_path)
 
     labels.extend([label_index] * len(matching_files))
@@ -524,7 +527,8 @@ def _find_image_files(data_dir, labels_file):
   # Shuffle the ordering of all image files in order to guarantee
   # random ordering of the images with respect to label in the
   # saved TFRecord files. Make the randomization repeatable.
-  shuffled_index = range(len(filenames))
+  
+  shuffled_index = list(range(len(filenames)))
   random.seed(12345)
   random.shuffle(shuffled_index)
 
