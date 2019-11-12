@@ -27,7 +27,7 @@ from datasets import dataset_utils
 
 slim = tf.contrib.slim
 
-_NUM_CLASSES = 180
+#_NUM_CLASSES = 180
 
 _ITEMS_TO_DESCRIPTIONS = {
     'image': 'A grayscale image of a grating.',
@@ -35,7 +35,7 @@ _ITEMS_TO_DESCRIPTIONS = {
 }
 
 
-def get_split(split_name, dataset_dir, dataset_str, reader=None):
+def get_split(split_name, dataset_dir, dataset_str, reader=None,num_classes=180):
   """Gets a dataset tuple with instructions for reading flowers.
 
   Args:
@@ -61,7 +61,7 @@ def get_split(split_name, dataset_dir, dataset_str, reader=None):
       SPLITS_TO_SIZES = {'train': 2592, 'validation': 288}
   elif 'Trn' in dataset_str:
       SPLITS_TO_SIZES = {'train': 1944, 'validation': 216}
-  elif 'Tst' in dataset_str:
+  elif 'Tst' in dataset_str or 'SpatFreqGratings' in dataset_str:
       SPLITS_TO_SIZES = {}
       for bb in range(96):
           SPLITS_TO_SIZES['batch' + str(bb)] = 90
@@ -92,11 +92,14 @@ def get_split(split_name, dataset_dir, dataset_str, reader=None):
   if dataset_utils.has_labels(dataset_dir):
     labels_to_names = dataset_utils.read_label_file(dataset_dir)
 
+#  assert len(labels_to_names)==num_classes
+  
+  
   return slim.dataset.Dataset(
       data_sources=file_pattern,
       reader=reader,
       decoder=decoder,
       num_samples=SPLITS_TO_SIZES[split_name],
       items_to_descriptions=_ITEMS_TO_DESCRIPTIONS,
-      num_classes=_NUM_CLASSES,
+      num_classes=num_classes,
       labels_to_names=labels_to_names)

@@ -24,14 +24,8 @@ from datasets import dataset_biasCNN
 from deployment import model_deploy
 from nets import nets_factory
 from preprocessing import preprocessing_biasCNN
-from tensorflow.python.training import saver as tf_saver
 
 slim = tf.contrib.slim
-#
-#import sys
-#import os
-#sys.path.append(os.getcwd())
-import learning_biasCNN
 
 ####################################################
 # Extra flags added for biasCNN training experiment
@@ -43,9 +37,6 @@ tf.app.flags.DEFINE_boolean(
 tf.app.flags.DEFINE_boolean(
     'random_scale', False, 'Boolean for whether to randomly scale images before cropping during preprocessing (applies to training only).')
 
-tf.app.flags.DEFINE_boolean(
-    'is_windowed', False, 'Boolean for whether images are already scaled and have circular gauss mask imposed. If true, do not resize or crop.')
-
 ##########################
 # Execution/path information
 ##########################
@@ -56,7 +47,6 @@ tf.app.flags.DEFINE_string(
 tf.app.flags.DEFINE_string(
     'train_dir', '',
     'Directory where checkpoints and event logs are written to.')
-
 
 tf.app.flags.DEFINE_integer('num_clones', 1,
                             'Number of model clones to deploy. Note For '
@@ -91,16 +81,8 @@ tf.app.flags.DEFINE_integer(
     'The frequency with which summaries are saved, in seconds.')
 
 tf.app.flags.DEFINE_integer(
-    'save_interval_secs', 300,
-    'The frequency with which the model (checkpoint) is saved, in seconds.')
-
-tf.app.flags.DEFINE_integer(
-    'max_checkpoints_to_keep', 1000000,
-    'Total number of checkpoint files that will be saved, if we exceed this they get deleted.')
-
-tf.app.flags.DEFINE_float(
-    'keep_checkpoint_every_n_hours', 0.20,
-    'At minimum, keep enough checkpoints so that there is one for every duration of this length.')
+    'save_interval_secs', 600,
+    'The frequency with which the model is saved, in seconds.')
 
 tf.app.flags.DEFINE_integer(
     'task', 0, 'Task id of the replica running the training.')
@@ -230,22 +212,13 @@ tf.app.flags.DEFINE_string(
     'as `None`, then the model_name flag is used.')
 
 tf.app.flags.DEFINE_integer(
-    'batch_size', 32, 'The number of samples in each training batch.')
-
-tf.app.flags.DEFINE_integer(
-    'batch_size_val', 100, 'The number of samples in each validation batch.')
+    'batch_size', 32, 'The number of samples in each batch.')
 
 tf.app.flags.DEFINE_integer(
     'train_image_size', None, 'Train image size')
 
-tf.app.flags.DEFINE_integer(
-    'eval_image_size', None, 'Validation image size')
-
-tf.app.flags.DEFINE_integer('max_number_of_steps', None,
+tf.app.flags.DEFINE_integer('max_number_of_steps', 400000,
                             'The maximum number of training steps.')
-
-tf.app.flags.DEFINE_integer('val_every_n_steps', 50, 
-                            'How often to evaluate loss on validation set')
 
 #####################
 # Fine-Tuning Flags #
@@ -270,6 +243,7 @@ tf.app.flags.DEFINE_boolean(
     'When restoring a checkpoint would ignore missing variables.')
 
 FLAGS = tf.app.flags.FLAGS
+
 
 def _configure_learning_rate(num_samples_per_epoch, global_step):
   """Configures the learning rate.
@@ -458,9 +432,6 @@ def main(_):
     ######################
     dataset = dataset_biasCNN.get_dataset(
         FLAGS.dataset_name, FLAGS.dataset_split_name, FLAGS.dataset_dir)
-    
-    dataset_val = dataset_biasCNN.get_dataset(
-        FLAGS.dataset_name, 'validation', FLAGS.dataset_dir)
 
     ######################
     # Select the network #
@@ -471,25 +442,14 @@ def main(_):
         weight_decay=FLAGS.weight_decay,
         is_training=True)
 
-    network_fn_val = nets_factory.get_network_fn(
-        FLAGS.model_name,
-        num_classes=(dataset.num_classes - FLAGS.labels_offset),
-        is_training=False)
-    
     #####################################
     # Select the preprocessing function #
     #####################################
     preprocessing_name = FLAGS.preprocessing_name or FLAGS.model_name
     image_preprocessing_fn = preprocessing_biasCNN.get_preprocessing(
         preprocessing_name,
-        is_training=True, flipLR = FLAGS.flipLR, random_scale = FLAGS.random_scale, 
-	is_windowed = FLAGS.is_windowed)
+        is_training=True, flipLR = FLAGS.flipLR, random_scale = FLAGS.random_scale)
 
-    image_preprocessing_fn_val = preprocessing_biasCNN.get_preprocessing(
-        preprocessing_name,
-        is_training=False, flipLR = FLAGS.flipLR, random_scale = FLAGS.random_scale, 
-	is_windowed=FLAGS.is_windowed)
-    
     ##############################################################
     # Create a dataset provider that loads data from the dataset #
     ##############################################################
@@ -515,38 +475,14 @@ def main(_):
           labels, dataset.num_classes - FLAGS.labels_offset)
       batch_queue = slim.prefetch_queue.prefetch_queue(
           [images, labels], capacity=2 * deploy_config.num_clones)
-      
-    ############################################
-    # Create a provider for the validation set #
-    ############################################
-    provider_val = slim.dataset_data_provider.DatasetDataProvider(
-        dataset_val,
-        shuffle=True,
-        common_queue_capacity=2 * FLAGS.batch_size_val,
-        common_queue_min=FLAGS.batch_size_val)
-    [image_val, label_val] = provider_val.get(['image', 'label'])
-    label_val -= FLAGS.labels_offset
-    
-    eval_image_size = FLAGS.eval_image_size or network_fn.default_image_size
 
-    image_val = image_preprocessing_fn_val(image_val, eval_image_size, eval_image_size)
-
-    images_val, labels_val = tf.train.batch(
-        [image_val, label_val],
-        batch_size=FLAGS.batch_size_val,
-        num_threads=FLAGS.num_preprocessing_threads,
-        capacity=5 * FLAGS.batch_size_val)
-    
-    ###############################
-    # Define the model (training) #
-    ###############################
-    
+    ####################
+    # Define the model #
+    ####################
     def clone_fn(batch_queue):
       """Allows data parallelism by creating multiple clones of network_fn."""
       images, labels = batch_queue.dequeue()
-      
-      with tf.variable_scope('my_scope'):
-          logits, end_points = network_fn(images)
+      logits, end_points = network_fn(images)
 
       #############################
       # Specify the loss function #
@@ -630,7 +566,7 @@ def main(_):
         var_list=variables_to_train)
     # Add total_loss to summary.
     summaries.add(tf.summary.scalar('total_loss', total_loss))
- 
+
     # Create gradient updates.
     grad_updates = optimizer.apply_gradients(clones_gradients,
                                              global_step=global_step)
@@ -645,61 +581,9 @@ def main(_):
     summaries |= set(tf.get_collection(tf.GraphKeys.SUMMARIES,
                                        first_clone_scope))
 
-    #################################
-    # Define the model (validation) #
-    #################################
-    
-    with tf.variable_scope('my_scope',reuse=True):
-        logits_val, _ = network_fn_val(images_val)
-
-    predictions_val = tf.argmax(logits_val, 1)
-    labels_val = tf.squeeze(labels_val)
-
-    # Define the metrics:
-    names_to_values, names_to_updates = slim.metrics.aggregate_metric_map({
-        'Accuracy': slim.metrics.streaming_accuracy(predictions_val, labels_val),
-        'Recall_5': slim.metrics.streaming_recall_at_k(
-            logits_val, labels_val, 5),
-    })
-
-    for name, value in names_to_values.items():
-      summary_name = 'eval/%s' % name
-      op = tf.summary.scalar(summary_name, value, collections=[])
-      op = tf.Print(op, [value], summary_name)
-      tf.add_to_collection('summaries', op)
-
-    # Gather validation summaries
-    summaries |= set(tf.get_collection(tf.GraphKeys.SUMMARIES))
     # Merge all summaries together.
     summary_op = tf.summary.merge(list(summaries), name='summary_op')
 
-    # Create a non-default saver so we don't delete all the old checkpoints.
-    my_saver = tf_saver.Saver(max_to_keep=FLAGS.max_checkpoints_to_keep,
-               keep_checkpoint_every_n_hours=FLAGS.keep_checkpoint_every_n_hours,)
-    
-    # Create a non-default dictionary of options for train_step_fn
-    # This is a hack that lets us pass everything we need to run evaluation, into the training loop function
-    from tensorflow.python.framework import ops
-    from tensorflow.python.framework import constant_op
-    from tensorflow.python.ops import math_ops
-    
-    with ops.name_scope('train_step'):
-        train_step_kwargs = {}
-
-        if FLAGS.max_number_of_steps:
-          should_stop_op = math_ops.greater_equal(global_step, FLAGS.max_number_of_steps)
-        else:
-          should_stop_op = constant_op.constant(False)
-        train_step_kwargs['should_stop'] = should_stop_op
-        if FLAGS.log_every_n_steps > 0:
-          train_step_kwargs['should_log'] = math_ops.equal(
-              math_ops.mod(global_step, FLAGS.log_every_n_steps), 0)
-        train_step_kwargs['val_every_n_steps'] = FLAGS.val_every_n_steps
-        train_step_kwargs['curr_step'] = 0
-        train_step_kwargs['eval_op'] = list(names_to_updates.values())
-
-#    assert(FLAGS.max_number_of_steps==100000)
-    print(should_stop_op)
     ###########################
     # Kicks off the training. #
     ###########################
@@ -714,10 +598,7 @@ def main(_):
         log_every_n_steps=FLAGS.log_every_n_steps,
         save_summaries_secs=FLAGS.save_summaries_secs,
         save_interval_secs=FLAGS.save_interval_secs,
-        sync_optimizer=optimizer if FLAGS.sync_replicas else None,
-        saver=my_saver, 
-        train_step_fn=learning_biasCNN.train_step_fn,
-        train_step_kwargs = train_step_kwargs)
+        sync_optimizer=optimizer if FLAGS.sync_replicas else None)
 
 
 if __name__ == '__main__':

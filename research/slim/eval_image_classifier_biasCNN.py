@@ -24,21 +24,26 @@ from __future__ import print_function
 import math
 import tensorflow as tf
 
-from datasets import datasets_MMH_biasCNN
+from datasets import dataset_biasCNN
 from nets import nets_factory
-from preprocessing import preprocessing_factory_MMH
+from preprocessing import preprocessing_biasCNN
 #import os
 import numpy as np
 
 slim = tf.contrib.slim
 
 #%%
+tf.app.flags.DEFINE_boolean(
+    'is_windowed', False, 'Boolean for whether images are already scaled and have circular gauss mask imposed. If true, do not resize or crop.')
 
 tf.app.flags.DEFINE_integer(
     'batch_size',90, 'The number of samples in each batch.')
 
 tf.app.flags.DEFINE_integer(
     'num_batches',96, 'The number of batches.')
+
+tf.app.flags.DEFINE_integer(
+    'num_classes',180,'The number of classes to place images in.')
 
 tf.app.flags.DEFINE_integer(
     'max_num_batches', 1,
@@ -51,6 +56,10 @@ tf.app.flags.DEFINE_string(
     'checkpoint_path', '',
     'The directory where the model was written to or an absolute path to a '
     'checkpoint file.')
+
+tf.app.flags.DEFINE_string(
+    'append_scope_string', None, 'The name of the scope used in the checkpoint '
+    'file, which is appended at the start of each layer name.')
 
 tf.app.flags.DEFINE_string(
     'eval_dir', '', 'Directory where the results are saved to.')
@@ -111,8 +120,8 @@ def main(_):
         ######################
         # Select the dataset #
         ######################
-        dataset = datasets_MMH_biasCNN.get_dataset(
-            FLAGS.dataset_name, batch_name, FLAGS.dataset_dir)
+        dataset = dataset_biasCNN.get_dataset(
+            FLAGS.dataset_name, batch_name, FLAGS.dataset_dir, num_classes=FLAGS.num_classes)
     
         ####################
         # Select the model #
@@ -139,9 +148,10 @@ def main(_):
         # Select the preprocessing function #
         #####################################
         preprocessing_name = FLAGS.preprocessing_name or FLAGS.model_name
-        image_preprocessing_fn = preprocessing_factory_MMH.get_preprocessing(
+        image_preprocessing_fn = preprocessing_biasCNN.get_preprocessing(
             preprocessing_name,
-            is_training=False, flipLR=False)
+            is_training=False, flipLR=False,random_scale=False, 
+	    is_windowed=FLAGS.is_windowed)
     
         eval_image_size = FLAGS.eval_image_size or network_fn.default_image_size
     
@@ -170,7 +180,19 @@ def main(_):
               slim.get_model_variables())
           variables_to_restore[tf_global_step.op.name] = tf_global_step
         else:
-          variables_to_restore = slim.get_variables_to_restore()
+            if FLAGS.append_scope_string:
+                # If I've specified a string for the name of the scope in the checkpoint file, append it here so we can match up the layer names
+                variables_to_restore_orig = slim.get_variables_to_restore()    
+                variables_to_restore = {}
+                for var in variables_to_restore_orig:
+                    curr_name = var.op.name
+                    if 'global_step' not in curr_name:
+                        new_name = 'my_scope/' + curr_name
+                    else:
+                        new_name = curr_name 
+                    variables_to_restore[new_name]=  var
+            else:                    
+                variables_to_restore = slim.get_variables_to_restore()
     
         predictions = tf.argmax(logits, 1)
         labels = tf.squeeze(labels)

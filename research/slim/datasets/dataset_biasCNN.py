@@ -29,10 +29,11 @@ datasets_map = {
     'flowers': flowers,
     'imagenet': imagenet,
     'mnist': mnist,
+    'gratings': gratings
 }
 
 
-def get_dataset(name, split_name, dataset_dir, file_pattern=None, reader=None):
+def get_dataset(name, split_name, dataset_dir, file_pattern=None, reader=None, num_classes=180):
   """Given a dataset name and a split_name returns a Dataset.
 
   Args:
@@ -51,13 +52,14 @@ def get_dataset(name, split_name, dataset_dir, file_pattern=None, reader=None):
   """
   if name not in datasets_map:
       
-      if 'ori' not in name:
+      if 'ori' not in name and 'Gratings' not in name:
           raise ValueError('Name of dataset unknown %s' % name)
       return gratings.get_split(
           split_name,
           dataset_dir,
           name,      
-          reader)
+          reader, 
+          num_classes=num_classes)
       
   return datasets_map[name].get_split(
       split_name,

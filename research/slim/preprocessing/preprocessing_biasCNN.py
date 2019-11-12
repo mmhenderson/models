@@ -25,7 +25,7 @@ from preprocessing import vgg_preprocessing_biasCNN
 
 slim = tf.contrib.slim
 
-def get_preprocessing(name, is_training=False, flipLR=False, random_scale=False):
+def get_preprocessing(name, is_training=False, flipLR=False, random_scale=False, is_windowed=False):
   """Returns preprocessing_fn(image, height, width, **kwargs).
 
   Args:
@@ -51,6 +51,6 @@ def get_preprocessing(name, is_training=False, flipLR=False, random_scale=False)
 
   def preprocessing_fn(image, output_height, output_width, **kwargs):      
     return preproc_fn.preprocess_image(
-        image, output_height, output_width, is_training=is_training, flipLR=flipLR, random_scale=random_scale, **kwargs)
+        image, output_height, output_width, is_training=is_training, flipLR=flipLR, random_scale=random_scale, is_windowed=is_windowed, **kwargs)
 
   return preprocessing_fn

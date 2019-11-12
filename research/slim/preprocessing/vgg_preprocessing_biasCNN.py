@@ -36,9 +36,9 @@ import tensorflow as tf
 
 slim = tf.contrib.slim
 
-_R_MEAN = 123.68
-_G_MEAN = 116.78
-_B_MEAN = 103.94
+_R_MEAN = 124
+_G_MEAN = 117
+_B_MEAN = 104
 
 _RESIZE_SIDE_MIN = 256
 _RESIZE_SIDE_MAX = 512
@@ -289,7 +289,8 @@ def preprocess_for_train(image,
                          resize_side_min=_RESIZE_SIDE_MIN,
                          resize_side_max=_RESIZE_SIDE_MAX,
                          flipLR=False,
-                         random_scale=False):
+                         random_scale=False, 
+                         is_windowed=False):
   """Preprocesses the given image for training.
 
   Note that the actual resizing scale is sampled from
@@ -305,7 +306,10 @@ def preprocess_for_train(image,
       aspect-preserving resizing.
     flipLR: boolean for whether to randomly flip half the images across the left-right axis.
     random_scale: boolean for whether to apply random scaling before cropping.
-    
+    is_windowed: boolean for whether images have already been resized and had 
+        a circular gaussian mask applied, to remove edge artifacts. If true, 
+        then we will skip resizing and cropping.
+        
   Returns:
     A preprocessed image.
   """
@@ -315,8 +319,18 @@ def preprocess_for_train(image,
   else:
        resize_side = resize_side_min
        
-  image = _aspect_preserving_resize(image, resize_side)
-  image = _random_crop([image], output_height, output_width)[0]
+  
+  if is_windowed:
+      # skip resizing and cropping, process at exactly current size
+      print('skipping resize and crop')
+      shape = tf.shape(image)
+      tf.assert_equal(shape[0],shape[1])
+      tf.assert_equal(shape[0],output_height)
+  else:
+      # resize, then crop randomly
+      image = _aspect_preserving_resize(image, resize_side)  
+      image = _random_crop([image], output_height, output_width)[0]
+      
   image.set_shape([output_height, output_width, 3])
   image = tf.to_float(image)
   
@@ -326,7 +340,7 @@ def preprocess_for_train(image,
   return _mean_image_subtraction(image, [_R_MEAN, _G_MEAN, _B_MEAN])
 
 
-def preprocess_for_eval(image, output_height, output_width, resize_side):
+def preprocess_for_eval(image, output_height, output_width, resize_side, is_windowed=False):
   """Preprocesses the given image for evaluation.
 
   Args:
@@ -334,22 +348,36 @@ def preprocess_for_eval(image, output_height, output_width, resize_side):
     output_height: The height of the image after preprocessing.
     output_width: The width of the image after preprocessing.
     resize_side: The smallest side of the image for aspect-preserving resizing.
-
+    is_windowed: boolean for whether images have already been resized and had 
+        a circular gaussian mask applied, to remove edge artifacts. If true, 
+        then we will skip resizing and cropping.
+    
   Returns:
     A preprocessed image.
   """
-  image = _aspect_preserving_resize(image, resize_side)
-  image = _central_crop([image], output_height, output_width)[0]
+  
+  if is_windowed:
+      # don't resize or crop
+      print('skipping resize and crop')
+      shape = tf.shape(image)
+      tf.assert_equal(shape[0],shape[1])
+      tf.assert_equal(shape[0],output_height)     
+  else:
+      # resize, then crop centrally
+      image = _aspect_preserving_resize(image, resize_side)
+      image = _central_crop([image], output_height, output_width)[0]
+      
   image.set_shape([output_height, output_width, 3])
   image = tf.to_float(image)
   return _mean_image_subtraction(image, [_R_MEAN, _G_MEAN, _B_MEAN])
 
 
-def preprocess_image(image, output_height, output_width, is_training=False,
+def preprocess_image(image, output_height, output_width, is_training=False, 
                      resize_side_min=_RESIZE_SIDE_MIN,
                      resize_side_max=_RESIZE_SIDE_MAX,
                      flipLR=False,
-                     random_scale=False):
+                     random_scale=False,
+                     is_windowed=False):
     
   """Preprocesses the given image.
 
@@ -368,13 +396,16 @@ def preprocess_image(image, output_height, output_width, is_training=False,
         [resize_size_min, resize_size_max].
     flipLR: boolean for whether to randomly flip half the images across the left-right axis (applies to training only).
     random_scale: boolean for whether to apply random scaling before cropping (applies to training only).
-
+    is_windowed: boolean for whether images have already been resized and had 
+        a circular gaussian mask applied, to remove edge artifacts. If true, 
+        then we will skip resizing and cropping.
+    
   Returns:
     A preprocessed image.
   """
   if is_training:
     return preprocess_for_train(image, output_height, output_width,
-                                resize_side_min, resize_side_max, flipLR, random_scale)
+                                resize_side_min, resize_side_max, flipLR, random_scale, is_windowed)
   else:
     return preprocess_for_eval(image, output_height, output_width,
-                               resize_side_min)
+                               resize_side_min, is_windowed)
