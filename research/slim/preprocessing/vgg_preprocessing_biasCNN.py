@@ -358,8 +358,18 @@ def preprocess_for_eval(image, output_height, output_width, resize_side, is_wind
   
   if is_windowed:
       # don't resize or crop
-      print('skipping resize and crop')
+     
       shape = tf.shape(image)
+      def fn1():
+        return tf.to_float(image)
+      def fn2():
+        return _aspect_preserving_resize(image, 224)
+      image = tf.cond(tf.math.equal(shape[0],224), fn1,fn2)
+#      if not tf.math.equal(shape[0],output_height)[0]:
+#        print('resizing image, skipping crop')
+#        image = _aspect_preserving_resize(image, resize_side)
+#      else:
+#       print('skipping resize and crop')
       tf.assert_equal(shape[0],shape[1])
       tf.assert_equal(shape[0],output_height)     
   else:

@@ -12,9 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Train model for biasCNN project.
-MODIFIED from train_image_classifier.py by MMH 
-"""
+"""Generic training script that trains a model using a given dataset."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -24,20 +22,16 @@ import tensorflow as tf
 
 from datasets import dataset_biasCNN
 from deployment import model_deploy
-from nets import nets_factory_biasCNN
-nets_factory = nets_factory_biasCNN
+from nets import nets_factory
 from preprocessing import preprocessing_biasCNN
 from tensorflow.python.training import saver as tf_saver
 
 slim = tf.contrib.slim
-
-import learning_biasCNN as learning_biasCNN
-
-from tensorflow.python.framework import ops
-from tensorflow.python.framework import constant_op
-from tensorflow.python.ops import math_ops
-
-from tensorflow.contrib.layers.python.layers import initializers
+#
+#import sys
+#import os
+#sys.path.append(os.getcwd())
+import learning_biasCNN
 
 ####################################################
 # Extra flags added for biasCNN training experiment
@@ -52,11 +46,6 @@ tf.app.flags.DEFINE_boolean(
 tf.app.flags.DEFINE_boolean(
     'is_windowed', False, 'Boolean for whether images are already scaled and have circular gauss mask imposed. If true, do not resize or crop.')
 
-tf.app.flags.DEFINE_string(
-    'weights_initializer', None, 'The weight initializer to use.')
-
-tf.app.flags.DEFINE_string(
-    'biases_initializer', None, 'The bias initializer to use.')
 ##########################
 # Execution/path information
 ##########################
@@ -98,7 +87,7 @@ tf.app.flags.DEFINE_integer(
     'The frequency with which logs are print.')
 
 tf.app.flags.DEFINE_integer(
-    'save_summaries_secs', 20,
+    'save_summaries_secs', 10,
     'The frequency with which summaries are saved, in seconds.')
 
 tf.app.flags.DEFINE_integer(
@@ -255,11 +244,8 @@ tf.app.flags.DEFINE_integer(
 tf.app.flags.DEFINE_integer('max_number_of_steps', None,
                             'The maximum number of training steps.')
 
-tf.app.flags.DEFINE_integer('val_every_n_steps', 10, 
+tf.app.flags.DEFINE_integer('val_every_n_steps', 50, 
                             'How often to evaluate loss on validation set')
-
-tf.app.flags.DEFINE_integer('reset_eval_metrics_every_n_vals', 5, 
-                            'How often to reset the counters for evaluation metrics (number of evaluations)')
 
 #####################
 # Fine-Tuning Flags #
@@ -284,7 +270,6 @@ tf.app.flags.DEFINE_boolean(
     'When restoring a checkpoint would ignore missing variables.')
 
 FLAGS = tf.app.flags.FLAGS
-
 
 def _configure_learning_rate(num_samples_per_epoch, global_step):
   """Configures the learning rate.
@@ -480,52 +465,15 @@ def main(_):
     ######################
     # Select the network #
     ######################
-    
-    if FLAGS.weights_initializer is None:
-      weights_initializer = None
-      # default value will be defined in argscope, it is xavier_initializer
-    elif FLAGS.weights_initializer=='zeros':
-      weights_initializer = tf.zeros_initializer()
-    elif FLAGS.weights_initializer=='ones':
-      weights_initializer = tf.ones_initializer()
-    elif FLAGS.weights_initializer=='trunc_normal':
-      weights_initializer = tf.truncated_normal_initializer()
-    elif FLAGS.weights_initializer=='xavier':
-      weights_initializer = initializers.xavier_initializer()
-    elif FLAGS.weights_initializer=='var_scaling':
-      weights_initializer = initializers.variance_scaling_initializer()
-    else:
-      raise ValueError('weight initializer not found')
-      
-    if FLAGS.biases_initializer is None:
-      biases_initializer = None
-      # default value will be defined in argscope, it is zeros_initializer
-    elif biases_initializer=='zeros':
-       biases_initializer = tf.zeros_initializer()
-    elif FLAGS.biases_initializer=='ones':
-       biases_initializer = tf.ones_initializer()
-    elif FLAGS.biases_initializer=='trunc_normal':
-      biases_initializer = tf.truncated_normal_initializer()
-    elif FLAGS.biases_initializer=='xavier':
-      biases_initializer = initializers.xavier_initializer()
-    elif FLAGS.biases_initializer=='var_scaling':
-      biases_initializer = initializers.variance_scaling_initializer()
-    else:
-      raise ValueError('biases initializer not found')
-    
     network_fn = nets_factory.get_network_fn(
         FLAGS.model_name,
         num_classes=(dataset.num_classes - FLAGS.labels_offset),
         weight_decay=FLAGS.weight_decay,
-        weights_initializer=weights_initializer,
-        biases_initializer=biases_initializer,
         is_training=True)
 
     network_fn_val = nets_factory.get_network_fn(
         FLAGS.model_name,
         num_classes=(dataset.num_classes - FLAGS.labels_offset),
-        weights_initializer=weights_initializer,
-        biases_initializer=biases_initializer,
         is_training=False)
     
     #####################################
@@ -588,9 +536,7 @@ def main(_):
           batch_size=FLAGS.batch_size_val,
           num_threads=FLAGS.num_preprocessing_threads,
           capacity=5 * FLAGS.batch_size_val)
-      labels_val_onehot = slim.one_hot_encoding(
-          labels_val, dataset.num_classes - FLAGS.labels_offset)
-      
+    
     ###############################
     # Define the model (training) #
     ###############################
@@ -610,9 +556,8 @@ def main(_):
             end_points['AuxLogits'], labels,
             label_smoothing=FLAGS.label_smoothing, weights=0.4,
             scope='aux_loss')
-        
-      tf.losses.softmax_cross_entropy(
-          labels, logits, label_smoothing=FLAGS.label_smoothing, weights=1.0)
+      slim.losses.softmax_cross_entropy(
+          logits, labels, label_smoothing=FLAGS.label_smoothing, weights=1.0)
       return end_points
 
     # Gather initial summaries.
@@ -709,55 +654,28 @@ def main(_):
     # Define the model (validation) #
     #################################
     
-    # get the validation set logits (predictions)
     with tf.variable_scope('my_scope',reuse=True):
-      logits_val, _ = network_fn_val(images_val)
-        
-    predictions_val = tf.argmax(logits_val, 1)
-    
-    # Define loss on validation set, add a summary
-    tf.losses.softmax_cross_entropy(
-      labels_val_onehot, logits_val, label_smoothing=FLAGS.label_smoothing, 
-      weights=1.0, loss_collection = 'eval_losses')
-    
-    for loss in tf.get_collection('eval_losses'):
-      summaries.add(tf.summary.scalar('eval_losses/%s' % loss.op.name, loss))
-      
-    # Define the validation set metrics: 
-    # Will define each metric twice as separate operation. 
-    # One set will be made resettable, the other set will be streaming.
-    with tf.name_scope('eval_metrics'):
-      eval_acc_value, eval_acc_op = tf.metrics.accuracy(predictions=predictions_val,labels=labels_val)    
-      eval_recall_5_value, eval_recall_5_op = slim.metrics.streaming_recall_at_k(predictions=logits_val, labels=labels_val,k=5) 
-      # add these variables as summaries for tensorboard
-      summaries.add(tf.summary.scalar('eval_recall_5', eval_recall_5_value))
-      summaries.add(tf.summary.scalar('eval_acc', eval_acc_value))
-      
-    with tf.name_scope('eval_metrics_streaming'):
-      eval_acc_streaming_value, eval_acc_streaming_op = tf.metrics.accuracy(predictions=predictions_val,labels=labels_val) 
-      eval_recall_5_streaming_value, eval_recall_5_streaming_op = slim.metrics.streaming_recall_at_k(predictions=logits_val, labels=labels_val,k=5) 
-      # add these variables as summaries for tensorboard
-      summaries.add(tf.summary.scalar('eval_recall_5_streaming', eval_recall_5_streaming_value))
-      summaries.add(tf.summary.scalar('eval_acc_streaming', eval_acc_streaming_value))
-    
-   # also add summaries of all the local variables used to compute the eval metrics...
-    for metric in tf.get_collection(tf.GraphKeys.METRIC_VARIABLES, 'eval_metrics'):
-      summaries.add(tf.summary.scalar('%s' % metric.op.name, metric))
-    for metric in tf.get_collection(tf.GraphKeys.METRIC_VARIABLES, 'eval_streaming_metrics'):
-      summaries.add(tf.summary.scalar('%s' % metric.op.name, metric))
+        logits_val, _ = network_fn_val(images_val)
 
-    # gather up all the variables that are used to compute eval metrics
-    stream_vars = [i for i in tf.local_variables() if i.name.split('/')[0]=='eval_metrics']
-    # make an operation that'll let us re-initialize just these vars.
-    reset_op = tf.initialize_variables(stream_vars)
-   
-    # make an operation that'll let us run evaluation (all metrics)
-    eval_op = list([eval_acc_op, eval_recall_5_op, eval_acc_streaming_op, eval_recall_5_streaming_op])
-    
+    predictions_val = tf.argmax(logits_val, 1)
+    labels_val = tf.squeeze(labels_val)
+
+    # Define the metrics:
+    names_to_values, names_to_updates = slim.metrics.aggregate_metric_map({
+        'Accuracy': slim.metrics.streaming_accuracy(predictions_val, labels_val),
+        'Recall_5': slim.metrics.streaming_recall_at_k(
+            logits_val, labels_val, 5)      
+    })
+
+    for name, value in names_to_values.items():
+      summary_name = 'eval/%s' % name
+      op = tf.summary.scalar(summary_name, value, collections=[])
+      op = tf.Print(op, [value], summary_name)
+      tf.add_to_collection('summaries', op)
+
     # Gather validation summaries
     summaries |= set(tf.get_collection(tf.GraphKeys.SUMMARIES))
-    
-    # Merge all summaries together (this includes training summaries too).
+    # Merge all summaries together.
     summary_op = tf.summary.merge(list(summaries), name='summary_op')
 
     # Create a non-default saver so we don't delete all the old checkpoints.
@@ -766,6 +684,10 @@ def main(_):
     
     # Create a non-default dictionary of options for train_step_fn
     # This is a hack that lets us pass everything we need to run evaluation, into the training loop function
+    from tensorflow.python.framework import ops
+    from tensorflow.python.framework import constant_op
+    from tensorflow.python.ops import math_ops
+    
     with ops.name_scope('train_step'):
         train_step_kwargs = {}
 
@@ -779,12 +701,10 @@ def main(_):
               math_ops.mod(global_step, FLAGS.log_every_n_steps), 0)
         train_step_kwargs['should_val'] = math_ops.equal(
                 math_ops.mod(global_step, FLAGS.val_every_n_steps),0)
-        train_step_kwargs['should_reset_eval_metrics'] = math_ops.equal(
-                math_ops.mod(global_step, tf.to_int64(math_ops.multiply(FLAGS.reset_eval_metrics_every_n_vals, FLAGS.val_every_n_steps))),0)
-        train_step_kwargs['eval_op'] = eval_op
-        train_step_kwargs['reset_op'] = reset_op
+        train_step_kwargs['eval_op'] = list(names_to_updates.values())
 
-  
+#    assert(FLAGS.max_number_of_steps==100000)
+    print(should_stop_op)
     ###########################
     # Kicks off the training. #
     ###########################

@@ -5,11 +5,9 @@ Created on Tue Oct  1 13:54:00 2019
 
 @author: mmhender
 """
-
+#import tensorflow as tf
 from tensorflow.contrib.slim.python.slim import learning
 #from tensorflow.contrib.slim.python.slim import evaluation
-from tensorflow.python.platform import tf_logging as logging
-
 
 def train_step_fn(sess, train_op, global_step, train_step_kwargs):
   """Function that takes a gradient step and specifies whether to stop.
@@ -27,26 +25,19 @@ def train_step_fn(sess, train_op, global_step, train_step_kwargs):
     The total loss and a boolean indicating whether or not to stop training.
 
   """
-
-  # first, run the normal training step (happens every single step)
-  total_loss, should_stop = learning.train_step(sess, train_op, global_step, train_step_kwargs)
-
-  # get global step as a value i can log 
-  global_step = sess.run(global_step)
- 
-  # decide whether to reset the streaming evaluation metrics
-  should_reset = sess.run(train_step_kwargs['should_reset_eval_metrics'])
-  if should_reset:
-      # reset counter and total
-      logging.info('RESETTING STREAMING EVAL METRICS AT STEP %d\n'% (global_step))
-      sess.run([train_step_kwargs['reset_op']])
   
-  # decide whether to run evaluation
-  should_val = sess.run(train_step_kwargs['should_val'])    
-  if should_val:   
+  total_loss, should_stop = learning.train_step(sess, train_op, global_step, train_step_kwargs)
+  
+  should_val = sess.run(train_step_kwargs['should_val'])
+  global_step = sess.run(global_step)
+  
+  if should_val:
       # validate
-      logging.info('EVALUATING MODEL AT STEP %d\n'% (global_step))
+
+      print('validating model on step %d'%global_step)
       sess.run([train_step_kwargs['eval_op']] )
 
+#  train_step_kwargs['curr_step'] += 1
+  
   return [total_loss, should_stop]
   

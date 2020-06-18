@@ -52,7 +52,7 @@ def get_dataset(name, split_name, dataset_dir, file_pattern=None, reader=None, n
   """
   if name not in datasets_map:
       
-      if 'ori' not in name and 'Gratings' not in name:
+      if 'ori' not in name and 'Gratings' not in name and 'FiltNoise' not in name and 'FiltIms' not in name:
           raise ValueError('Name of dataset unknown %s' % name)
       return gratings.get_split(
           split_name,

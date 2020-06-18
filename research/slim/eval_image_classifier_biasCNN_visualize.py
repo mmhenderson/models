@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Generic evaluation script that evaluates a model using a given dataset.
-    Note that you can specify dataset_dir and dataset_name separately - this works
-    if you want to specify a particular level of noise in the stimuli. Just
-    call this script once for each noise level."""
+"""Pass images through a trained model to visualize the activation patterns at the first network layer.
+This is mostly a check to make sure that orientation labels go clockwise. 
+(note that imagenet rotations are actually counter-clockwise though)
+MODIFIED from eval_image_classifier.py by MMH 
+"""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -27,14 +28,12 @@ import tensorflow as tf
 from datasets import dataset_biasCNN
 from nets import nets_factory
 from preprocessing import preprocessing_biasCNN
-#import os
-import numpy as np
 
 slim = tf.contrib.slim
 
 #%%
 tf.app.flags.DEFINE_boolean(
-    'is_windowed', False, 'Boolean for whether images are already scaled and have circular gauss mask imposed. If true, do not resize or crop.')
+    'is_windowed', True, 'Boolean for whether images are already scaled and have circular gauss mask imposed. If true, do not resize or crop.')
 
 tf.app.flags.DEFINE_integer(
     'batch_size',90, 'The number of samples in each batch.')
@@ -105,7 +104,8 @@ def main(_):
 
   num_batches= FLAGS.num_batches
 
-  for bb in np.arange(0,num_batches):
+#  for bb in np.arange(0,num_batches):
+  for bb in [0]:
     
       batch_name = 'batch'+str(bb)
       
@@ -187,7 +187,7 @@ def main(_):
                 for var in variables_to_restore_orig:
                     curr_name = var.op.name
                     if 'global_step' not in curr_name:
-                        new_name = 'my_scope/' + curr_name
+                        new_name = FLAGS.append_scope_string + '/' + curr_name
                     else:
                         new_name = curr_name 
                     variables_to_restore[new_name]=  var
@@ -203,6 +203,21 @@ def main(_):
             'Recall_5': slim.metrics.streaming_recall_at_k(
                 logits, labels, 5),
         })
+            
+        # Gather initial summaries.
+        summaries = set(tf.get_collection(tf.GraphKeys.SUMMARIES))
+
+        # Add summaries for first layer to visualize the image, double check whether rotations are CW or CCW
+        
+        
+        keylist= list(end_pts.keys())
+       
+        x = end_pts[keylist[0]]
+        dims = x.get_shape()
+        for ii in range(dims[0]):
+          
+          summaries.add(tf.summary.image('image_out/' + keylist[0] + '/label_' + str(ii), tf.slice(x,[ii,0,0,0],[1,dims[1],dims[2],1])))
+          summaries.add(tf.summary.scalar('image_label/label_' + str(ii), labels[ii]))
     
         # Print the summaries to screen.
         for name, value in names_to_values.items():
@@ -211,6 +226,9 @@ def main(_):
           op = tf.Print(op, [value], summary_name)
           tf.add_to_collection(tf.GraphKeys.SUMMARIES, op)
     
+        # Merge all summaries together (this includes training summaries too).
+        summary_op = tf.summary.merge(list(summaries), name='summary_op')
+
         # TODO(sguada) use num_epochs=1
         if FLAGS.max_num_batches:
           num_batches = FLAGS.max_num_batches
@@ -231,40 +249,44 @@ def main(_):
             logdir=FLAGS.eval_dir,
             num_evals=num_batches,
             eval_op=list(names_to_updates.values()),
+            summary_op=summary_op,
             final_op={'logits':logits, 'end_pts':end_pts,'images':images,'labels':labels,'predictions':predictions},
             variables_to_restore=variables_to_restore)
            
     
-        end_pts= out['end_pts']
+#        end_pts= out['end_pts']
         
-        keylist= list(end_pts.keys())
-     
-        for kk in range(np.size(keylist)):
-            keystr = keylist[kk]
-            keystr = keystr.replace('/','_') 
-            fn2save = FLAGS.eval_dir + '/' + batch_name + '_' + keystr + '.npy'
-            np.save(fn2save, end_pts[keylist[kk]])
-            
-        logits = out['logits']
-                
-#        images = out['images']
-        
-        labels = out['labels']
-
-        predictions = out['predictions']
-    
-        fn2save = FLAGS.eval_dir + '/' + batch_name + '_logits.npy'
-        np.save(fn2save, logits)
-        
-#        fn2save = FLAGS.eval_dir + '/' + batch_name + '_ims_orig.npy'
-#        np.save(fn2save, images)
-        
-        fn2save = FLAGS.eval_dir + '/' + batch_name + '_labels_orig.npy'
-        np.save(fn2save, labels)
-          
-        fn2save = FLAGS.eval_dir + '/' + batch_name + '_labels_predicted.npy'
-        np.save(fn2save, predictions)
+#       
+#        # save npy files of activations
+#        keylist= list(end_pts.keys())
+#     
+#        for kk in range(np.size(keylist)):
+#            keystr = keylist[kk]
+#            keystr = keystr.replace('/','_') 
+#            fn2save = FLAGS.eval_dir + '/' + batch_name + '_' + keystr + '.npy'
+#            np.save(fn2save, end_pts[keylist[kk]])
+#            
+#        logits = out['logits']
+#                
+##        images = out['images']
+#        
+#        labels = out['labels']
+#
+#        predictions = out['predictions']
+#    
+#        fn2save = FLAGS.eval_dir + '/' + batch_name + '_logits.npy'
+#        np.save(fn2save, logits)
+#        
+##        fn2save = FLAGS.eval_dir + '/' + batch_name + '_ims_orig.npy'
+##        np.save(fn2save, images)
+#        
+#        fn2save = FLAGS.eval_dir + '/' + batch_name + '_labels_orig.npy'
+#        np.save(fn2save, labels)
+#          
+#        fn2save = FLAGS.eval_dir + '/' + batch_name + '_labels_predicted.npy'
+#        np.save(fn2save, predictions)
          
+        
                                     
 if __name__ == '__main__':
   tf.app.run()

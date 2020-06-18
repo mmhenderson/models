@@ -61,7 +61,7 @@ def get_split(split_name, dataset_dir, dataset_str, reader=None,num_classes=180)
       SPLITS_TO_SIZES = {'train': 2592, 'validation': 288}
   elif 'Trn' in dataset_str:
       SPLITS_TO_SIZES = {'train': 1944, 'validation': 216}
-  elif 'Tst' in dataset_str or 'SpatFreqGratings' in dataset_str:
+  elif 'Tst' in dataset_str or 'Gratings' in dataset_str or 'FiltNoise' in dataset_str or 'FiltIms' in dataset_str:
       SPLITS_TO_SIZES = {}
       for bb in range(96):
           SPLITS_TO_SIZES['batch' + str(bb)] = 90
